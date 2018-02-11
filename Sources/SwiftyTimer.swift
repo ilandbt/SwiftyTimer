@@ -23,10 +23,36 @@
 //
 
 import Foundation
+import ObjectiveC
 
 extension Timer {
     
-// MARK: Schedule timers
+    // MARK: Schedule timers
+    
+    private struct AssociatedKeys {
+        static var repeatCounterAddress = "repeat_counter_address"
+        static var numberOfRepeatsAddress = "number_of_repeats_address"
+    }
+    
+    private var repeatCounter: Int {
+        get {
+            return objc_getAssociatedObject(self, &AssociatedKeys.repeatCounterAddress) as? Int ?? 0
+        }
+        set {
+            
+            objc_setAssociatedObject(self,
+                                     &AssociatedKeys.repeatCounterAddress,
+                                     newValue,
+                                     .OBJC_ASSOCIATION_RETAIN)
+        }
+    }
+    
+    public class func every(_ interval: TimeInterval, `for` times: Int, _ block: @escaping (Timer) -> Void) -> Timer  {
+        
+        let timer = Timer.new(every: interval, for: times, block)
+        timer.start()
+        return timer
+    }
     
     /// Create and schedule a timer that will call `block` once after the specified time.
     
@@ -56,14 +82,14 @@ extension Timer {
         return timer
     }
     
-// MARK: Create timers without scheduling
+    // MARK: Create timers without scheduling
     
     /// Create a timer that will call `block` once after the specified time.
     ///
     /// - Note: The timer won't fire until it's scheduled on the run loop.
     ///         Use `NSTimer.after` to create and schedule a timer in one step.
     /// - Note: The `new` class function is a workaround for a crashing bug when using convenience initializers (rdar://18720947)
-
+    
     public class func new(after interval: TimeInterval, _ block: @escaping () -> Void) -> Timer {
         return CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, 0, 0, 0) { _ in
             block()
@@ -75,11 +101,30 @@ extension Timer {
     /// - Note: The timer won't fire until it's scheduled on the run loop.
     ///         Use `NSTimer.every` to create and schedule a timer in one step.
     /// - Note: The `new` class function is a workaround for a crashing bug when using convenience initializers (rdar://18720947)
-
+    
     public class func new(every interval: TimeInterval, _ block: @escaping () -> Void) -> Timer {
         return CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
             block()
         }
+    }
+    
+    @nonobjc public class func new(every interval: TimeInterval, `for` times: Int, _ block: @escaping () -> Void) -> Timer {
+        var timer: Timer!
+        
+        timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
+            
+            if times > 0 {
+                if timer.repeatCounter == times {
+                    timer.invalidate()
+                    return
+                } else {
+                    timer.repeatCounter += 1
+                }
+            }
+            
+            block()
+        }
+        return timer
     }
     
     /// Create a timer that will call `block` repeatedly in specified time intervals.
@@ -89,6 +134,25 @@ extension Timer {
     ///         Use `NSTimer.every` to create and schedule a timer in one step.
     /// - Note: The `new` class function is a workaround for a crashing bug when using convenience initializers (rdar://18720947)
     
+    @nonobjc public class func new(every interval: TimeInterval, `for` times: Int, _ block: @escaping (Timer) -> Void) -> Timer {
+        var timer: Timer!
+        
+        timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
+            
+            if times > 0 {
+                if timer.repeatCounter == times {
+                    timer.invalidate()
+                    return
+                } else {
+                    timer.repeatCounter += 1
+                }
+            }
+            
+            block(timer)
+        }
+        return timer
+    }
+    
     @nonobjc public class func new(every interval: TimeInterval, _ block: @escaping (Timer) -> Void) -> Timer {
         var timer: Timer!
         timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
@@ -97,7 +161,7 @@ extension Timer {
         return timer
     }
     
-// MARK: Manual scheduling
+    // MARK: Manual scheduling
     
     /// Schedule this timer on the run loop
     ///
@@ -115,7 +179,7 @@ extension Timer {
 
 // MARK: - Time extensions
 
-extension Double {
+public extension Double {
     public var millisecond: TimeInterval  { return self / 1000 }
     public var milliseconds: TimeInterval { return self / 1000 }
     public var ms: TimeInterval           { return self / 1000 }
@@ -132,3 +196,5 @@ extension Double {
     public var day: TimeInterval          { return self * 3600 * 24 }
     public var days: TimeInterval         { return self * 3600 * 24 }
 }
+
+
