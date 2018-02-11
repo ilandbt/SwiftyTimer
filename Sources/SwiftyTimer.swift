@@ -31,12 +31,18 @@ extension Timer {
     
     private struct AssociatedKeys {
         static var repeatCounterAddress = "repeat_counter_address"
-        //        static var isTimerRunning = "is_timer_running_address"
+        static var isTimerRunning = "is_timer_running_address"
     }
     
-    private var isRunning: Bool {
+    public var isRunning: Bool {
         get {
-            return isValid//objc_getAssociatedObject(self, &AssociatedKeys.isTimerRunning) as? Bool ?? false
+            return isValid && objc_getAssociatedObject(self, &AssociatedKeys.isTimerRunning) as? Bool ?? false
+        }
+        set {
+            objc_setAssociatedObject(self,
+                                     &AssociatedKeys.isTimerRunning,
+                                     newValue,
+                                     .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
     
@@ -98,6 +104,7 @@ extension Timer {
     
     public class func new(after interval: TimeInterval, _ block: @escaping () -> Void) -> Timer {
         return CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, 0, 0, 0) { timer  in
+            (timer as! Timer).isRunning = false
             block()
         }
     }
@@ -120,12 +127,11 @@ extension Timer {
         timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
             
             if times > 0 {
-                if timer.repeatCounter == times {
+                if timer.repeatCounter == (times-1) {
                     timer.invalidate()
-                    return
-                } else {
-                    timer.repeatCounter += 1
                 }
+                timer.repeatCounter += 1
+                
             }
             
             block()
@@ -146,12 +152,12 @@ extension Timer {
         timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
             
             if times > 0 {
-                if timer.repeatCounter == times {
+                if timer.repeatCounter == (times-1) {
                     timer.invalidate()
-                    return
-                } else {
-                    timer.repeatCounter += 1
                 }
+                
+                timer.repeatCounter += 1
+                
             }
             
             block(timer, timer.repeatCounter)
@@ -175,6 +181,7 @@ extension Timer {
     /// Specify `runLoop` or `modes` to override these defaults.
     
     public func start(runLoop: RunLoop = .current, modes: RunLoopMode...) {
+        isRunning = true
         let modes = modes.isEmpty ? [.defaultRunLoopMode] : modes
         
         for mode in modes {
