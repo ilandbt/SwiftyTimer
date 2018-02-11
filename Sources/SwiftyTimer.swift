@@ -31,23 +31,29 @@ extension Timer {
     
     private struct AssociatedKeys {
         static var repeatCounterAddress = "repeat_counter_address"
-        static var numberOfRepeatsAddress = "number_of_repeats_address"
+        //        static var isTimerRunning = "is_timer_running_address"
     }
+    
+    private var isRunning: Bool {
+        get {
+            return isValid//objc_getAssociatedObject(self, &AssociatedKeys.isTimerRunning) as? Bool ?? false
+        }
+    }
+    
     
     private var repeatCounter: Int {
         get {
             return objc_getAssociatedObject(self, &AssociatedKeys.repeatCounterAddress) as? Int ?? 0
         }
         set {
-            
             objc_setAssociatedObject(self,
                                      &AssociatedKeys.repeatCounterAddress,
                                      newValue,
-                                     .OBJC_ASSOCIATION_RETAIN)
+                                     .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
     }
     
-    public class func every(_ interval: TimeInterval, `for` times: Int, _ block: @escaping (Timer) -> Void) -> Timer  {
+    public class func every(_ interval: TimeInterval, `for` times: Int, _ block: @escaping (Timer, Int) -> Void) -> Timer  {
         
         let timer = Timer.new(every: interval, for: times, block)
         timer.start()
@@ -91,7 +97,7 @@ extension Timer {
     /// - Note: The `new` class function is a workaround for a crashing bug when using convenience initializers (rdar://18720947)
     
     public class func new(after interval: TimeInterval, _ block: @escaping () -> Void) -> Timer {
-        return CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, 0, 0, 0) { _ in
+        return CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, 0, 0, 0) { timer  in
             block()
         }
     }
@@ -134,7 +140,7 @@ extension Timer {
     ///         Use `NSTimer.every` to create and schedule a timer in one step.
     /// - Note: The `new` class function is a workaround for a crashing bug when using convenience initializers (rdar://18720947)
     
-    @nonobjc public class func new(every interval: TimeInterval, `for` times: Int, _ block: @escaping (Timer) -> Void) -> Timer {
+    @nonobjc public class func new(every interval: TimeInterval, `for` times: Int, _ block: @escaping (Timer, Int) -> Void) -> Timer {
         var timer: Timer!
         
         timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, interval, 0, 0) { _ in
@@ -148,7 +154,7 @@ extension Timer {
                 }
             }
             
-            block(timer)
+            block(timer, timer.repeatCounter)
         }
         return timer
     }
@@ -175,6 +181,7 @@ extension Timer {
             runLoop.add(self, forMode: mode)
         }
     }
+    
 }
 
 // MARK: - Time extensions
@@ -196,5 +203,4 @@ public extension Double {
     public var day: TimeInterval          { return self * 3600 * 24 }
     public var days: TimeInterval         { return self * 3600 * 24 }
 }
-
 
